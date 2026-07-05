@@ -80,10 +80,14 @@ async def custom_middleware(request: Request, call_next):
     origin = request.headers.get("Origin")
 
     response = None
-
+    client_id = request.headers.get("X-Client-Id","default")
     if path == "/orders":
         client_id = request.headers.get("X-Client-Id", "default")
-        if "flood" in client_id or client_id == "default":
+        if is_rate_limited(client_id, config.Q9_RATE_LIMIT, "q9"):
+            response = Response(
+                status_code=429,
+                headers={"Retry-After":"10"}
+            )
             if is_rate_limited(client_id, config.Q9_RATE_LIMIT, "q9"):
                 response = Response(status_code=429, headers={"Retry-After": "10"})
 
@@ -296,7 +300,11 @@ async def extract(request: Request):
         curr_match = re.search(r'\b(USD|EUR|GBP|INR|CAD|AUD|JPY|CHF)\b', text)
         currency = curr_match.group(1).upper() if curr_match else ""
             
-        vendor_match = re.search(r'([A-Za-z0-9]+-[A-Z0-9]{4})', text)
+        vendor_match = re.search(
+                r'([A-Za-z0-9\- ]+(?:Ltd\.|Inc\.|LLC|Corp\.|Company|Industries))',
+                text,
+                re.I
+            )           
         vendor = vendor_match.group(1) if vendor_match else ""
             
         amount = 0.0
